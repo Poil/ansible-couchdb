@@ -1,0 +1,11 @@
+---
+# defaults file for couchdb
+couchdb:
+  repo:
+    url: 'http://apache.bintray.com/couchdb-rpm/el$releasever/$basearch/'
+  config:
+    - section: 'chttpd'
+      option: 'bind_address'
+      value: '0.0.0.0'
+  admin_password: admin
+  users: []

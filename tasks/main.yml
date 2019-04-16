@@ -1,0 +1,116 @@
+---
+- name: CouchDB Configure Repository
+  tags: couchdb
+  become: true
+  yum_repository:
+    name: bintray-apache-couchdb-rpm
+    description: bintray-apache-couchdb-rpm
+    baseurl: "{{ couchdb.repo.url }}"
+    gpgcheck: 0
+    repo_gpgcheck: 0
+    enabled: 1
+
+- name: CouchDB Install Package
+  tags: couchdb
+  become: true
+  package:
+    name: couchdb
+    state: present
+  register: couchdb_pkg
+
+- name: CouchDB Custom Config
+  tags: couchdb
+  become: true
+  ini_file:
+    path: /opt/couchdb/etc/local.d/custom.ini
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
+  with_items: "{{ couchdb.config }}"
+
+- name: CouchDB Start Service
+  tags: couchdb
+  become: true
+  service:
+    name: couchdb
+    enabled: 1
+    state: started
+
+- name: CouchDB Wait for running
+  tags: couchdb
+  uri:
+    url: http://127.0.0.1:5984/_up
+    status_code: 200
+    body_format: json
+    return_content: true
+  register: result
+  until: result.json.status == 'ok'
+  delay: 5
+  retries: 20
+
+- name: CouchDB Initial Config Users
+  tags: couchdb
+  uri:
+    url: http://127.0.0.1:5984/_users
+    method: PUT
+    status_code: 201
+  when: couchdb_pkg.changed
+
+- name: CouchDB Initial Config Replicator
+  tags: couchdb
+  uri:
+    url: http://127.0.0.1:5984/_replicator
+    method: PUT
+    status_code: 201
+  when: couchdb_pkg.changed
+
+- name: CouchDB Initial Config Global Changes
+  tags: couchdb
+  uri:
+    url: http://127.0.0.1:5984/_global_changes
+    method: PUT
+    status_code: 201
+  when: couchdb_pkg.changed
+
+- name: CouchDB Initial Config Admin
+  tags: couchdb
+  uri:
+    url: http://127.0.0.1:5984/_node/couchdb@127.0.0.1/_config/admins/admin
+    method: PUT
+    body: "\"{{ couchdb.admin_password }}\""
+    body_format: json
+    status_code: 200
+  when: couchdb_pkg.changed
+
+- name: CouchDB Users Check
+  tags: couchdb
+  uri:
+    url: http://127.0.0.1:5984/_users/org.couchdb.user:{{ item.name }}
+    user: admin
+    password: "{{ couchdb.admin_password }}"
+    status_code: 200,404
+    body_format: json
+    force_basic_auth: true
+  with_items: "{{ couchdb.users }}"
+  register: couchdb_users
+
+- name: Couchdb Create Users
+  tags: couchdb
+  uri:
+    url: http://127.0.0.1:5984/_users/org.couchdb.user:{{ item.item.name }}
+    method: PUT
+    user: admin
+    password: "{{ couchdb.admin_password }}"
+    status_code: 201
+    body_format: json
+    force_basic_auth: true
+    body:
+      name: "{{ item.item.name }}"
+      password: "{{ item.item.password }}"
+      roles: "{{ item.item.roles }}"
+      type: "user"
+  with_items: "{{ couchdb_users.results }}"
+  when:
+    - not item | skipped
+    - item.status == 404
+...
