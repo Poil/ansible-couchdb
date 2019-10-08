@@ -1,2 +1,7 @@
 ---
-# handlers file for couchdb
+- name: CouchDB Restart Service
+  become: true
+  service:
+    name: couchdb
+    state: restarted
+...

@@ -1,6 +1,6 @@
 ---
 - name: CouchDB Configure Repository
-  tags: couchdb
+  tags: always
   become: true
   yum_repository:
     name: bintray-apache-couchdb-rpm
@@ -11,7 +11,7 @@
     enabled: 1
 
 - name: CouchDB Install Package
-  tags: couchdb
+  tags: always
   become: true
   package:
     name: couchdb
@@ -19,7 +19,7 @@
   register: couchdb_pkg
 
 - name: CouchDB Custom Config
-  tags: couchdb
+  tags: always
   become: true
   ini_file:
     path: /opt/couchdb/etc/local.d/custom.ini
@@ -27,9 +27,23 @@
     option: "{{ item.option }}"
     value: "{{ item.value }}"
   with_items: "{{ couchdb.config }}"
+  notify:
+    - CouchDB Restart Service
+
+- name: CouchDB Tuning
+  tags: always
+  become: true
+  ini_file:
+    path: /etc/systemd/system/couchdb.service.d/override.conf
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
+  with_items: "{{ couchdb.systemd_tuning }}"
+  notify:
+    - CouchDB Restart Service
 
 - name: CouchDB Start Service
-  tags: couchdb
+  tags: always
   become: true
   service:
     name: couchdb
@@ -37,7 +51,7 @@
     state: started
 
 - name: CouchDB Wait for running
-  tags: couchdb
+  tags: always
   uri:
     url: http://127.0.0.1:5984/_up
     status_code: 200
@@ -47,9 +61,10 @@
   until: result.json.status == 'ok'
   delay: 5
   retries: 20
+  check_mode: false
 
 - name: CouchDB Initial Config Users
-  tags: couchdb
+  tags: always
   uri:
     url: http://127.0.0.1:5984/_users
     method: PUT
@@ -57,7 +72,7 @@
   when: couchdb_pkg.changed
 
 - name: CouchDB Initial Config Replicator
-  tags: couchdb
+  tags: always
   uri:
     url: http://127.0.0.1:5984/_replicator
     method: PUT
@@ -65,7 +80,7 @@
   when: couchdb_pkg.changed
 
 - name: CouchDB Initial Config Global Changes
-  tags: couchdb
+  tags: always
   uri:
     url: http://127.0.0.1:5984/_global_changes
     method: PUT
@@ -73,7 +88,7 @@
   when: couchdb_pkg.changed
 
 - name: CouchDB Initial Config Admin
-  tags: couchdb
+  tags: always
   uri:
     url: http://127.0.0.1:5984/_node/couchdb@127.0.0.1/_config/admins/admin
     method: PUT
@@ -83,7 +98,7 @@
   when: couchdb_pkg.changed
 
 - name: CouchDB Users Check
-  tags: couchdb
+  tags: always
   uri:
     url: http://127.0.0.1:5984/_users/org.couchdb.user:{{ item.name }}
     user: admin
@@ -93,9 +108,10 @@
     force_basic_auth: true
   with_items: "{{ couchdb.users }}"
   register: couchdb_users
+  check_mode: false
 
 - name: Couchdb Create Users
-  tags: couchdb
+  tags: always
   uri:
     url: http://127.0.0.1:5984/_users/org.couchdb.user:{{ item.item.name }}
     method: PUT
